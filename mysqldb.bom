@@ -1,0 +1,198 @@
+brooklyn.catalog:
+  id: mysqldb
+  name: MySQL Database
+  itemType: entity
+  description: Installs MySQL Database Server
+
+  items:
+  - id: mysql-base
+    name: Abstract MySQL Database Server
+    description: |
+      Defines common functionality of mysql-server and mysql-slave
+    item:
+      type: org.apache.brooklyn.entity.software.base.VanillaSoftwareProcess
+      name: MySQL Server
+
+      brooklyn.parameters:
+
+      - name: root.password
+        description: Password for the root user
+        constraints:
+        - required
+
+      - name: login.user
+        description: Name of a user who may log in over remote connection. Required for master DB instance.
+
+      - name: login.password
+        description: Password for the login user. Required for master DB instance.
+
+      - name: mysql.port
+        type: port
+        description: Port of the mysql listener
+        default: 3306
+
+      - name: replication.password
+        description: Optional password for replication user. Replication is only configured if this is supplied.
+        type: string
+
+      - name: server.id
+        type: integer
+        description: MySQL 'server-id' value for replication. Only required if replication is configured.
+
+      - name: TODO.my.cnf.additions
+        description: TODO allow configuration of /etc/my.cnf - use augeas  - or add a /root/.my.cnf
+
+      brooklyn.config:
+
+        provisioning.properties:
+          osFamily: ubuntu
+
+        shell.env:
+          ROOT_PASSWORD: $brooklyn:config("root.password")
+          REPLICATION_PASSWORD: $brooklyn:config("replication.password")
+          SERVER_ID: $brooklyn:config("server.id")
+
+        # note the install command ensures mysql is stopped, so derived types can do further config before start
+        install.command: |
+          cat > install-mysql.sh <<END
+          #!/usr/bin/env bash
+          set -e
+          export DEBIAN_FRONTEND="noninteractive"
+          debconf-set-selections <<< "mysql-server mysql-server/root_password password ${ROOT_PASSWORD}"
+          debconf-set-selections <<< "mysql-server mysql-server/root_password_again password ${ROOT_PASSWORD}"
+          # for mysql 5.6
+          sudo add-apt-repository 'deb http://archive.ubuntu.com/ubuntu trusty universe'
+          sudo apt-get update
+          sudo apt install -y mysql-server-5.6 mysql-client-5.6 augeas-tools
+          update-rc.d mysql defaults
+          service mysql stop
+          END
+          chmod +x install-mysql.sh
+          sudo ./install-mysql.sh
+
+          sudo augtool <<EOF
+          rm /files/etc/mysql/my.cnf/target[ . = "mysqld" ]/bind-address
+          save
+          EOF
+
+        customize.command: |
+          [ -n "${REPLICATION_PASSWORD}" ] && sudo augtool <<EOF
+          set /files/etc/mysql/my.cnf/target[ . = "mysqld" ]/lower_case_table_names "1"
+          set /files/etc/mysql/my.cnf/target[ . = "mysqld" ]/log-bin "mysql-bin"
+          set /files/etc/mysql/my.cnf/target[ . = "mysqld" ]/server-id "${SERVER_ID}"
+          set /files/etc/mysql/my.cnf/target[ . = "mysqld" ]/gtid_mode "ON"
+          set /files/etc/mysql/my.cnf/target[ . = "mysqld" ]/log-slave-updates "true"
+          set /files/etc/mysql/my.cnf/target[ . = "mysqld" ]/enforce-gtid-consistency "true"
+          set /files/etc/mysql/my.cnf/target[ . = "mysqld" ]/skip-slave-start "true"
+          save
+          EOF
+
+        # see comment on install above, the derived types are required to start mysql
+        checkRunning.command: |
+          sudo service mysql status | grep 'running'
+
+  - id: mysql-server
+    name: MySQL Server
+    description: |
+      A MySQL Server installation
+    item:
+      type: mysql-base
+      brooklyn.config:
+
+        templates.runtime:
+          classpath://configure-mysql.sql : configure-mysql.sql
+          classpath://create-repl-user.sql : create-repl-user.sql
+
+        launch.command: |
+          sudo service mysql start
+
+          sudo mysql -u root -p${ROOT_PASSWORD} < configure-mysql.sql
+          if [ -n "${REPLICATION_PASSWORD}" ] ; then
+            sudo mysql -u root -p${ROOT_PASSWORD} < create-repl-user.sql
+          fi
+
+
+  - id: mysql-slave
+    name: MySQL Slave
+    description: |
+      Installs MySQL configured as a slave to an existing MySQL server, which must be a fresh installation
+      without any data so far.
+    item:
+      type: mysql-base
+
+      brooklyn.parameters:
+      - name: server
+        description: Brooklyn entity ID of the mysql-server entity
+
+      brooklyn.config:
+        master.host: $brooklyn:entity(config("server")).attributeWhenReady("host.name")
+        master.user: repl
+        master.password: $brooklyn:entity(config("server")).config("replication.password")
+
+        templates.runtime:
+          classpath://configure-mysql.sql : configure-mysql.sql
+          classpath://init-slave.sql : init-slave.sql
+
+        launch.command: |
+          sudo service mysql start
+          sudo mysql -u root -p${ROOT_PASSWORD} < configure-mysql.sql
+          sudo mysql -u root -p${ROOT_PASSWORD} < init-slave.sql
+
+
+  - id: mysql-database
+    name: MySQL Database
+    description: |
+      Installs a MySQL database on an exising MySQL server installation.
+      Supply a database name as configuration, and a schema creation script
+      either inline, or by providing a URL to fetch it from.
+    item:
+      type: org.apache.brooklyn.entity.software.base.VanillaSoftwareProcess
+      name: MySQL Database
+
+      brooklyn.parameters:
+      - name: server
+        description: Brooklyn entity ID of the mysql-server entity
+
+      - name: databaseName
+        description: Name of the database to create
+        constraints:
+        - required
+
+      - name: schema.create.url
+        description: URL for database schema creation script
+
+      - name: schema.create.script
+        description: text of a database schema creation script
+
+      brooklyn.config:
+
+        shell.env:
+          ROOT_PASSWORD: $brooklyn:entity(config("server")).config("root.password")
+          DATABASE_NAME: $brooklyn:config("databaseName")
+          SCHEMA_CREATE_URL: $brooklyn:config("schema.create.url")
+          SCHEMA_CREATE_SCRIPT: $brooklyn:config("schema.create.script")
+
+        templates.runtime:
+          classpath://create-database.sql : create-database.sql
+
+        customize.command: |
+          CREATE_SCHEMA_FILE=create-schema.sql
+          if [ -n "${SCHEMA_CREATE_URL}" ] ; then
+            echo fetching "${SCHEMA_CREATE_URL}"
+            curl -o ${CREATE_SCHEMA_FILE} ${SCHEMA_CREATE_URL}
+          elif [ -n "${SCHEMA_CREATE_SCRIPT}" ] ; then
+            printf "%s" "${SCHEMA_CREATE_SCRIPT}" > ${CREATE_SCHEMA_FILE}
+          else
+            >&2 echo Configuration must supply either "schema.create.url" or "schema.create.script"
+            exit 1
+          fi
+
+        launch.command: |
+          echo creating database ${DATABASE_NAME}
+          sudo mysql -u root -p${ROOT_PASSWORD} < create-database.sql
+          echo creating schema
+          sudo mysql -u root -p${ROOT_PASSWORD} ${DATABASE_NAME} < create-schema.sql
+          echo done
+
+        checkRunning.command: |
+          sudo mysql -u root -p${ROOT_PASSWORD} -e 'SHOW DATABASES' | grep ${DATABASE_NAME}

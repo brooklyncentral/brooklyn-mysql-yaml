@@ -1,0 +1,43 @@
+location: jclouds:aws-ec2:eu-west-1
+name: testmysql
+
+services:
+- type: org.apache.brooklyn.entity.software.base.SameServerEntity
+  name: MySQL Master
+
+  brooklyn.children:
+  - type: mysql-server
+    id: dbserver
+    brooklyn.config:
+      root.password: password
+      login.user: someuser
+      login.password: password
+      replication.password: password
+      server.id: 1
+
+  - type: mysql-database
+    name: Classic Models
+    id: database
+    brooklyn.config:
+      login.user: someuser
+      server: dbserver
+      latch.start: $brooklyn:component("repl-slave").attributeWhenReady("service.isUp")
+      databaseName: classicmodels
+      schema.create.url: https://raw.githubusercontent.com/geomacy/salt-add-formula/master/mysql/files/classicmodels.schema
+
+- type: org.apache.brooklyn.entity.software.base.SameServerEntity
+  name: MySQL Slave
+  brooklyn.children:
+
+  - type: mysql-slave
+    id: repl-slave
+    name: replication slave
+    brooklyn.config:
+      latch.start: $brooklyn:component("dbserver").attributeWhenReady("service.isUp")
+      server: dbserver
+      root.password: password
+      login.user: someuser
+      login.password: password
+      server.id: 2
+      replication.password: $brooklyn:component("dbserver").config("replication.password")
+
