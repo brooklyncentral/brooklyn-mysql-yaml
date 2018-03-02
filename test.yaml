@@ -23,7 +23,7 @@ services:
       server: dbserver
       latch.start: $brooklyn:component("repl-slave").attributeWhenReady("service.isUp")
       databaseName: classicmodels
-      schema.create.url: https://raw.githubusercontent.com/geomacy/salt-add-formula/master/mysql/files/classicmodels.schema
+      schema.create.url: https://raw.githubusercontent.com/brooklyncentral/brooklyn-mysql-yaml/master/classicmodels.schema
 
 - type: org.apache.brooklyn.entity.software.base.SameServerEntity
   name: MySQL Slave
