@@ -1,9 +1,14 @@
 location: jclouds:aws-ec2:eu-west-1
 name: testmysql
 
+brooklyn.config:
+  provisioning.properties:
+    osVersionRegex: 16.04
+
 services:
 - type: org.apache.brooklyn.entity.software.base.SameServerEntity
   name: MySQL Master
+
 
   brooklyn.children:
   - type: mysql-server
@@ -40,4 +45,3 @@ services:
       login.password: password
       server.id: 2
       replication.password: $brooklyn:component("dbserver").config("replication.password")
-

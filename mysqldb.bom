@@ -57,13 +57,17 @@ brooklyn.catalog:
           cat > install-mysql.sh <<END
           #!/usr/bin/env bash
           set -e
+          # workaround for Ubuntu 16.04 problem with AppArmor denying access to a symlinked file
+          echo '/etc/mysql/** lr,' >> /etc/apparmor.d/local/usr.sbin.mysqld
+          sudo service apparmor restart
+          # install mysql 5.6
           export DEBIAN_FRONTEND="noninteractive"
           debconf-set-selections <<< "mysql-server mysql-server/root_password password ${ROOT_PASSWORD}"
           debconf-set-selections <<< "mysql-server mysql-server/root_password_again password ${ROOT_PASSWORD}"
-          # for mysql 5.6
-          sudo add-apt-repository 'deb http://archive.ubuntu.com/ubuntu trusty universe'
-          sudo apt-get update
-          sudo apt install -y mysql-server-5.6 mysql-client-5.6 augeas-tools
+          apt-get install -y software-properties-common
+          add-apt-repository 'deb http://archive.ubuntu.com/ubuntu trusty universe'
+          apt-get update
+          apt-get install -y libaio1 mysql-server-5.6 mysql-client-5.6 augeas-tools
           update-rc.d mysql defaults
           service mysql stop
           END
@@ -76,7 +80,13 @@ brooklyn.catalog:
           EOF
 
         customize.command: |
-          [ -n "${REPLICATION_PASSWORD}" ] && sudo augtool <<EOF
+          fgrep '[mysqld]' /etc/mysql/my.cnf || sudo augtool <<EOF
+          set /files/etc/mysql/my.cnf/target[. = 'mysqld'] 'mysqld'
+          save
+          EOF
+
+          if [ -n "${REPLICATION_PASSWORD}" ] ; then
+          sudo augtool <<EOF
           set /files/etc/mysql/my.cnf/target[ . = "mysqld" ]/lower_case_table_names "1"
           set /files/etc/mysql/my.cnf/target[ . = "mysqld" ]/log-bin "mysql-bin"
           set /files/etc/mysql/my.cnf/target[ . = "mysqld" ]/server-id "${SERVER_ID}"
@@ -86,10 +96,11 @@ brooklyn.catalog:
           set /files/etc/mysql/my.cnf/target[ . = "mysqld" ]/skip-slave-start "true"
           save
           EOF
+          fi
 
         # see comment on install above, the derived types are required to start mysql
         checkRunning.command: |
-          sudo service mysql status | grep 'running'
+          sudo service mysql status | egrep 'running|Active'
 
   - id: mysql-server
     name: MySQL Server
@@ -108,6 +119,7 @@ brooklyn.catalog:
 
           sudo mysql -u root -p${ROOT_PASSWORD} < configure-mysql.sql
           if [ -n "${REPLICATION_PASSWORD}" ] ; then
+            sudo mysql -u root -p${ROOT_PASSWORD} <<< "RESET MASTER;"
             sudo mysql -u root -p${ROOT_PASSWORD} < create-repl-user.sql
           fi
 
