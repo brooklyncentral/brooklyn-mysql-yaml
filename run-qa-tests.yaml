@@ -1,0 +1,7 @@
+location: jclouds:aws-ec2:eu-west-1
+name: test all
+services:
+#- type: single-node-ubuntu-14
+#- type: master-slave-ubuntu-14
+- type: single-node-ubuntu-16
+- type: master-slave-ubuntu-16

@@ -1,0 +1,51 @@
+brooklyn.catalog:
+  id: mysqldb-tests-16
+  name: MySQL YAML Tests
+  itemType: entity
+  description: Tests of pure YAML MySQL on Ubuntu 16
+
+  items:
+
+  - https://github.com/brooklyncentral/common-catalog-utils/releases/download/v0.1.0/common.tests.bom
+
+  - id: single-node-ubuntu-16
+    name: Single Node Ubuntu 16
+    itemType: entity
+    description: Test MySQL single node on Ubuntu 16.04
+    item:
+      type: test-case
+      name: Single Node Ubuntu 16
+      brooklyn.config:
+        provisioning.properties:
+          osVersionRegex: 16.04
+
+      brooklyn.children:
+      - type: mysqldb-single-node
+        id: ubuntu-16-single
+
+      - type: assert-up-and-running-initial
+        name: "1. Target up"
+        brooklyn.config:
+          targetId: ubuntu-16-single
+          timeout: 10m
+
+  - id: master-slave-ubuntu-16
+    name: Master-Slave Ubuntu 16
+    itemType: entity
+    description: Test MySQL Master-Slave on Ubuntu 16.04
+    item:
+      type: test-case
+      name: Master-Slave Ubuntu 16
+      brooklyn.config:
+        provisioning.properties:
+          osVersionRegex: 16.04
+
+      brooklyn.children:
+      - type: mysqldb-master-slave
+        id: ubuntu-16-master-slave
+
+      - type: assert-up-and-running-initial
+        name: "1. Target up"
+        brooklyn.config:
+          targetId: ubuntu-16-master-slave
+          timeout: 10m

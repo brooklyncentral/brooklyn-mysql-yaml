@@ -137,9 +137,9 @@ brooklyn.catalog:
         description: Brooklyn entity ID of the mysql-server entity
 
       brooklyn.config:
-        master.host: $brooklyn:entity(config("server")).attributeWhenReady("host.name")
+        master.host: $brooklyn:component(config("server")).attributeWhenReady("host.name")
         master.user: repl
-        master.password: $brooklyn:entity(config("server")).config("replication.password")
+        master.password: $brooklyn:component(config("server")).config("replication.password")
 
         templates.runtime:
           classpath://configure-mysql.sql : configure-mysql.sql
@@ -179,7 +179,7 @@ brooklyn.catalog:
       brooklyn.config:
 
         shell.env:
-          ROOT_PASSWORD: $brooklyn:entity(config("server")).config("root.password")
+          ROOT_PASSWORD: $brooklyn:component(config("server")).config("root.password")
           DATABASE_NAME: $brooklyn:config("databaseName")
           SCHEMA_CREATE_URL: $brooklyn:config("schema.create.url")
           SCHEMA_CREATE_SCRIPT: $brooklyn:config("schema.create.script")
