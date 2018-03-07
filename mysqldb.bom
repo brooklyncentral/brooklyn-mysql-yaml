@@ -64,9 +64,10 @@ brooklyn.catalog:
           export DEBIAN_FRONTEND="noninteractive"
           debconf-set-selections <<< "mysql-server mysql-server/root_password password ${ROOT_PASSWORD}"
           debconf-set-selections <<< "mysql-server mysql-server/root_password_again password ${ROOT_PASSWORD}"
+          apt-get update
           apt-get install -y software-properties-common
           add-apt-repository 'deb http://archive.ubuntu.com/ubuntu trusty universe'
-          apt-get update
+          apt-get update # update again to get contents of http://archive.ubuntu.com/ubuntu trusty universe
           apt-get install -y libaio1 mysql-server-5.6 mysql-client-5.6 augeas-tools
           update-rc.d mysql defaults
           service mysql stop
