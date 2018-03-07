@@ -5,4 +5,3 @@ GRANT ALL PRIVILEGES ON *.* TO '${config["login.user"]}'@'%';
 REVOKE SUPER ON *.* FROM '${config["login.user"]}'@'%';
 
 FLUSH PRIVILEGES;
-RESET MASTER;

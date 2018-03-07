@@ -1,0 +1,9 @@
+location: jclouds:aws-ec2:eu-west-1
+name: test all
+services:
+# Can't deploy e.g. master-slave-ubuntu-14 and master-slave-ubuntu-14
+# at the same time as they both define a database with an id of "masterdb".
+#- type: single-node-ubuntu-14
+#- type: master-slave-ubuntu-14
+- type: single-node-ubuntu-16
+- type: master-slave-ubuntu-16

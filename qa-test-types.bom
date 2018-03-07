@@ -1,0 +1,84 @@
+brooklyn.catalog:
+  id: mysqldb-test-services
+  name: MySQL Database Test Services
+  itemType: entity
+  description: Services for tests of MySQL Database Server
+
+  items:
+
+  - id: mysqldb-master-slave
+    name: Master-Slave Test
+    itemType: entity
+    description: A Master-Slave combination for test
+    item:
+      type: org.apache.brooklyn.entity.stock.BasicApplication
+      name: Master-Slave Test
+      brooklyn.children:
+
+      - type: org.apache.brooklyn.entity.software.base.SameServerEntity
+        name: Master
+        brooklyn.children:
+        - type: mysql-server
+          id: masterdb
+          brooklyn.config:
+            root.password: password
+            login.user: someuser
+            login.password: password
+            replication.password: password
+            server.id: 1
+
+        - type: mysql-database
+          name: Classic Models
+          id: database
+          brooklyn.config:
+            login.user: someuser
+            server: masterdb
+            latch.start: $brooklyn:parent().parent().descendant("repl-slave").attributeWhenReady("service.isUp")
+            databaseName: classicmodels
+            schema.create.url: https://raw.githubusercontent.com/brooklyncentral/brooklyn-mysql-yaml/master/classicmodels.schema
+
+      - type: org.apache.brooklyn.entity.software.base.SameServerEntity
+        name: Slave
+        brooklyn.children:
+
+        - type: mysql-slave
+          id: repl-slave
+          name: replication slave
+          brooklyn.config:
+            latch.start: $brooklyn:component("masterdb").attributeWhenReady("service.isUp")
+            server: masterdb
+            root.password: password
+            login.user: someuser
+            login.password: password
+            server.id: 2
+            replication.password: $brooklyn:component("masterdb").config("replication.password")
+
+  - id: mysqldb-single-node
+    name: Single-Node Test
+    itemType: entity
+    description: A single node database for test
+    item:
+      name: Single-Node Test
+      type: org.apache.brooklyn.entity.stock.BasicApplication
+      brooklyn.children:
+
+      - type: org.apache.brooklyn.entity.software.base.SameServerEntity
+        name: MySQL Single Node
+
+        brooklyn.children:
+        - type: mysql-server
+          id: dbserver
+          brooklyn.config:
+            root.password: password
+            login.user: someuser
+            login.password: password
+
+        - type: mysql-database
+          name: Classic Models
+          id: database
+          brooklyn.config:
+            login.user: someuser
+            latch.start: $brooklyn:sibling("dbserver").attributeWhenReady("service.process.isRunning")
+            server: dbserver
+            databaseName: classicmodels
+            schema.create.url: https://raw.githubusercontent.com/brooklyncentral/brooklyn-mysql-yaml/master/classicmodels.schema
